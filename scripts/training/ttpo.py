@@ -17,6 +17,8 @@ from typing import List, Iterator, Optional, Dict
 import typer
 from typer_config import use_yaml_config
 import numpy as np
+import pandas as pd
+
 import torch
 import torch.distributed as dist
 from torch.utils.data import IterableDataset, get_worker_info
@@ -41,11 +43,14 @@ from gluonts.transform import (
     LeavesMissingValues,
     LastValueImputation,
 )
-
+from gluonts.time_feature.seasonality import get_seasonality
+from gluonts.evaluation.metrics import calculate_seasonal_error, mase
+from statsforecast import StatsForecast
+from statsforecast.models import SeasonalNaive
 from chronos import ChronosConfig, ChronosTokenizer
 
-from .ttpo_config import TTPOConfig
-from .ttpo_trainer import TTPOTrainer
+from ttpo_config import TTPOConfig
+from ttpo_trainer import TTPOTrainer
 
 app = typer.Typer(pretty_exceptions_enable=False)
 
@@ -441,11 +446,62 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
             input_ids[~attention_mask] = self.tokenizer.config.pad_token_id
             labels[~attention_mask] = -100
 
+        # sesonal naive forecast
+        # level = self._transform_quantiles_to_levels(
+        #     [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        # )
+        freq = entry["start"].freqstr
+        seasonality = get_seasonality(freq)
+        models = [SeasonalNaive(season_length=seasonality)]
+        sf = StatsForecast(models=models, freq=freq, n_jobs=-1)
+        ds = pd.date_range(
+            start=entry["start"].to_timestamp(),
+            freq=entry["start"].freq,
+            periods=len(entry["past_target"]),
+        )
+
+        ts_df = pd.DataFrame(
+            {"unique_id": "item_id", "ds": ds, "y": entry["past_target"]}
+        )
+        median = ts_df.y.median()
+        ts_df = ts_df.fillna(value=median)
+
+        fcsts_df = sf.forecast(df=ts_df, h=self.prediction_length)
+
+        seasonal_naive_labels, seaononal_naive_labels_mask = (
+            self.tokenizer.label_input_transform(
+                fcsts_df["SeasonalNaive"].values, scale
+            )
+        )
+        seasonal_naive_labels[seaononal_naive_labels_mask == 0] = -100
+
+        seasonal_error = calculate_seasonal_error(ts_df.y.values, freq, seasonality)
+
+        mase_sesonal_naive = mase(
+            np.nan_to_num(entry["future_target"], median),
+            fcsts_df["SeasonalNaive"].values,
+            seasonal_error,
+        )
+
+        import pdb
+        pdb.set_trace()
+
         return {
             "input_ids": input_ids.squeeze(0),
             "attention_mask": attention_mask.squeeze(0),
             "labels": labels.squeeze(0),
+            "scale": scale,
+            "past_target": past_target.squeeze(0),
+            "future_target": future_target.squeeze(0),
         }
+
+    # @staticmethod
+    # def _transform_quantiles_to_levels(quantiles: List[float]) -> List[int]:
+    #     level = [
+    #         int(100 - 200 * q) for q in quantiles if q < 0.5
+    #     ]  # in this case mean=mediain
+    #     level = sorted(list(set(level)))
+    #     return level
 
     def __iter__(self) -> Iterator:
         preprocessed_datasets = [
@@ -503,6 +559,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 @use_yaml_config(param_name="config")
 def main(
     training_data_paths: str,
+    frequency: str,
     probability: Optional[str] = None,
     context_length: int = 512,
     prediction_length: int = 64,
@@ -565,6 +622,9 @@ def main(
     training_data_paths = ast.literal_eval(training_data_paths)
     assert isinstance(training_data_paths, list)
 
+    frequency = ast.literal_eval(frequency)
+    assert isinstance(frequency, list)
+
     if isinstance(probability, str):
         probability = ast.literal_eval(probability)
     elif probability is None:
@@ -598,9 +658,9 @@ def main(
                 min_length=min_past + prediction_length,
                 max_missing_prop=max_missing_prop,
             ),
-            FileDataset(path=Path(data_path), freq="h"),
+            FileDataset(path=Path(data_path), freq=freq),
         )
-        for data_path in training_data_paths
+        for data_path, freq in zip(training_data_paths, frequency)
     ]
 
     log_on_main("Initializing model", logger)
