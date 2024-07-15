@@ -1,6 +1,7 @@
+import torch.nn.functional as F
 from transformers import Trainer
 
-from .ttpo_config import TTPOConfig
+from ttpo_config import TTPOConfig
 
 
 class TTPOTrainer(Trainer):
@@ -10,13 +11,25 @@ class TTPOTrainer(Trainer):
         self.alpha = args.alpha
 
     def compute_loss(self, model, inputs, return_outputs=False):
-        import pdb
+        # supervised loss
+        outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["labels"])
+        loss = outputs.loss * self.alpha
 
-        pdb.set_trace()
-        outputs = model(**inputs)
-        loss = outputs.loss
+        # margin loss
+        chosen_outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["chosen_labels"])
+        rejected_outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["rejected_labels"])
+        
+        chosen_logits = chosen_outputs.logits
+        chosen_log_probs = chosen_logits.log_softmax(-1)
+
+        rejected_logits = rejected_outputs.logits
+        rejected_log_probs = rejected_logits.log_softmax(-1)
+        
+        ratio = chosen_log_probs - rejected_log_probs
+        ttpo_loss = -F.logsigmoid(self.beta * ratio).mean()
+        
         if return_outputs:
-            return loss, outputs
+            return loss + ttpo_loss, outputs
         return loss
 
     def training_step(self, model, inputs):

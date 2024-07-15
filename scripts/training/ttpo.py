@@ -47,7 +47,7 @@ from gluonts.time_feature.seasonality import get_seasonality
 from gluonts.evaluation.metrics import calculate_seasonal_error, mase
 from statsforecast import StatsForecast
 from statsforecast.models import SeasonalNaive
-from chronos import ChronosConfig, ChronosTokenizer
+from chronos import ChronosConfig, ChronosTokenizer, ChronosPipeline
 
 from ttpo_config import TTPOConfig
 from ttpo_trainer import TTPOTrainer
@@ -332,6 +332,13 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         self.mode = mode
         self.np_dtype = np_dtype
 
+        # chorono static pipeline
+        self.pipeline = ChronosPipeline.from_pretrained(
+            "amazon/chronos-t5-small",
+            device_map="cpu",  # use "cpu" for CPU inference and "mps" for Apple Silicon
+            # torch_dtype=torch.bfloat16,
+        )
+
     def preprocess_entry(self, entry: dict, mode: str) -> dict:
         entry = {f: entry[f] for f in ["start", "target"]}
         entry["target"] = np.asarray(entry["target"], dtype=self.np_dtype)
@@ -465,12 +472,11 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         )
         median = ts_df.y.median()
         ts_df = ts_df.fillna(value=median)
-
         fcsts_df = sf.forecast(df=ts_df, h=self.prediction_length)
 
         seasonal_naive_labels, seaononal_naive_labels_mask = (
             self.tokenizer.label_input_transform(
-                fcsts_df["SeasonalNaive"].values, scale
+                torch.tensor(fcsts_df["SeasonalNaive"].values).unsqueeze(0), scale
             )
         )
         seasonal_naive_labels[seaononal_naive_labels_mask == 0] = -100
@@ -483,16 +489,37 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
             seasonal_error,
         )
 
-        import pdb
-        pdb.set_trace()
+        chronos_forecast = self.pipeline.predict(
+            context=past_target,
+            prediction_length=self.prediction_length,
+            num_samples=20,
+        )
+        mase_chronos = mase(
+            np.nan_to_num(entry["future_target"], median),
+            chronos_forecast.mean(dim=1).squeeze().numpy(),
+            seasonal_error,
+        )
+        chronos_labels, chronos_labels_mask = (
+            self.tokenizer.label_input_transform(
+                chronos_forecast.mean(dim=1), scale
+            )
+        )
+        chronos_labels[chronos_labels_mask == 0] = -100
+
+        if mase_chronos < mase_sesonal_naive:
+            chosen_labels = chronos_labels
+            rejected_labels = seasonal_naive_labels
+        else:
+            chosen_labels = seasonal_naive_labels
+            rejected_labels = chronos_labels
 
         return {
             "input_ids": input_ids.squeeze(0),
             "attention_mask": attention_mask.squeeze(0),
             "labels": labels.squeeze(0),
             "scale": scale,
-            "past_target": past_target.squeeze(0),
-            "future_target": future_target.squeeze(0),
+            "chosen_labels": chosen_labels.squeeze(0),
+            "rejected_labels": rejected_labels.squeeze(0),
         }
 
     # @staticmethod
