@@ -12,12 +12,12 @@ class TTPOTrainer(Trainer):
 
     def compute_loss(self, model, inputs, return_outputs=False):
         # supervised loss
-        outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["labels"])
+        outputs = model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["labels"])
         loss = outputs.loss * self.alpha
 
         # margin loss
-        chosen_outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["chosen_labels"])
-        rejected_outputs = model(inputs_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["rejected_labels"])
+        chosen_outputs = model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["chosen_labels"])
+        rejected_outputs = model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"], labels=inputs["rejected_labels"])
         
         chosen_logits = chosen_outputs.logits
         chosen_log_probs = chosen_logits.log_softmax(-1)
