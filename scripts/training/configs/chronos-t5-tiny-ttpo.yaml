@@ -17,7 +17,7 @@ per_device_train_batch_size: 8
 learning_rate: 0.001
 optim: adamw_torch_fused
 num_samples: 20
-shuffle_buffer_length: 32
+shuffle_buffer_length: 8
 gradient_accumulation_steps: 1
 model_id: google/t5-efficient-tiny
 model_type: seq2seq
@@ -33,6 +33,6 @@ tokenizer_kwargs:
 n_tokens: 4096
 lr_scheduler_type: linear
 warmup_ratio: 0.0
-dataloader_num_workers: 4
+dataloader_num_workers: 0
 max_missing_prop: 0.9
 use_eos_token: true
