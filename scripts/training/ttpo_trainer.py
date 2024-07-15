@@ -30,10 +30,11 @@ class TTPOTrainer(Trainer):
         
         if return_outputs:
             return loss + ttpo_loss, outputs
-        return loss
+        
+        return loss + ttpo_loss
 
     def training_step(self, model, inputs):
-        loss = self.compute_loss(model, inputs)
+        loss = self.compute_loss(model, inputs, return_outputs=False)
         return loss
 
     def compute_metrics(self, eval_pred):
