@@ -32,29 +32,3 @@ class TTPOTrainer(Trainer):
             return loss + ttpo_loss, outputs
         
         return loss + ttpo_loss
-
-    def training_step(self, model, inputs):
-        loss = self.compute_loss(model, inputs, return_outputs=False)
-        return loss
-
-    def compute_metrics(self, eval_pred):
-        return {"loss": eval_pred.loss}
-
-    def eval_step(self, model, inputs):
-        loss = self.compute_loss(model, inputs)
-        return loss
-
-    def prediction_step(self, *args, **kwargs):
-        return super().prediction_step(*args, **kwargs)
-
-    def post_process_function(self, *args, **kwargs):
-        return super().post_process_function(*args, **kwargs)
-
-    def create_optimizer_and_scheduler(self, num_training_steps: int):
-        return super().create_optimizer_and_scheduler(num_training_steps)
-
-    def evaluate(self, *args, **kwargs):
-        return super().evaluate(*args, **kwargs)
-
-    def predict(self, *args, **kwargs):
-        return super().predict(*args, **kwargs)
