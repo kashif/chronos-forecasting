@@ -24,8 +24,8 @@ class TTPOTrainer(Trainer):
 
         rejected_logits = rejected_outputs.logits
         rejected_log_probs = rejected_logits.log_softmax(-1)
-        
-        ratio = chosen_log_probs - rejected_log_probs
+
+        ratio = (chosen_log_probs - rejected_log_probs) * inputs["abs_metric_diff"].reshape(-1, 1, 1)
         ttpo_loss = -F.logsigmoid(self.beta * ratio).mean()
         
         if return_outputs:

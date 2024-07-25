@@ -5,5 +5,5 @@ from transformers import TrainingArguments
 
 @dataclass
 class TTPOConfig(TrainingArguments):
-    beta: float = 0.1
+    beta: float = 1.0
     alpha: float = 0.1

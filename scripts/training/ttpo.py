@@ -517,7 +517,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
             "input_ids": input_ids.squeeze(0),
             "attention_mask": attention_mask.squeeze(0),
             "labels": labels.squeeze(0),
-            "scale": scale,
+            "abs_metric_diff": abs(mase_chronos - mase_sesonal_naive),
             "chosen_labels": chosen_labels.squeeze(0),
             "rejected_labels": rejected_labels.squeeze(0),
         }
