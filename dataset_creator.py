@@ -36,19 +36,29 @@ def create_dataset_with_forecaster(
     List[Dict]
         List of formatted datasets.
     """
-    pipeline = ChronosPipeline.from_pretrained(
+    def sample_random_window(target, context_length, prediction_length):
+        max_start = len(target) - context_length - prediction_length
+        if max_start <= 0:
+            raise ValueError("Target series is too short for the given context and prediction lengths.")
+        start_idx = np.random.randint(0, max_start)
+        context_window = target[start_idx:start_idx + context_length]
+        prediction_window = target[start_idx + context_length:start_idx + context_length + prediction_length]
+        return context_window, prediction_window
         "amazon/chronos-t5-small",
         device_map="cpu",
     )
 
     datasets = []
     for entry in entries:
-        past_target = torch.tensor(entry["target"]).unsqueeze(0)
+        context_window, prediction_window = sample_random_window(
+            entry["target"], tokenizer.context_length, prediction_length
+        )
+        past_target = torch.tensor(context_window).unsqueeze(0)
         input_ids, attention_mask, scale = tokenizer.context_input_transform(
             past_target
         )
 
-        # Seasonal naive forecast
+        future_target = torch.tensor(prediction_window).unsqueeze(0)
         freq = entry["start"].freqstr
         seasonality = get_seasonality(freq)
         models = [SeasonalNaive(season_length=seasonality)]
