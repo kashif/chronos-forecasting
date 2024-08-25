@@ -44,9 +44,6 @@ def create_dataset_with_forecaster(
         context_window = target[start_idx:start_idx + context_length]
         prediction_window = target[start_idx + context_length:start_idx + context_length + prediction_length]
         return context_window, prediction_window
-        "amazon/chronos-t5-small",
-        device_map="cpu",
-    )
 
     datasets = []
     for entry in entries:
