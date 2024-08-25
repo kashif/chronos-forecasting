@@ -31,7 +31,8 @@ from transformers import (
 )
 import accelerate
 import gluonts
-from gluonts.dataset.common import FileDataset
+from gluonts.dataset.common import FileDataset, ListDataset
+from datasets import load_dataset, Dataset, DatasetDict
 from gluonts.itertools import Cyclic, Map, Filter
 from gluonts.transform import (
     FilterTransformation,
@@ -722,17 +723,28 @@ def main(
     # Add extra items to model config so that it's saved in the ckpt
     model.config.chronos_config = chronos_config.__dict__
 
-    shuffled_train_dataset = ChronosDataset(
-        datasets=train_datasets,
-        probabilities=probability,
-        tokenizer=chronos_config.create_tokenizer(),
-        context_length=context_length,
-        prediction_length=prediction_length,
-        min_past=min_past,
-        model_type=model_type,
-        imputation_method=LastValueImputation() if model_type == "causal" else None,
-        mode="training",
-    ).shuffle(shuffle_buffer_length=shuffle_buffer_length)
+    # Load dataset from a saved file if available
+    dataset_path = "path/to/saved/dataset"
+    if os.path.exists(dataset_path):
+        hf_dataset = load_dataset("json", data_files=dataset_path)
+        train_dataset = hf_dataset["train"]
+    else:
+        # Create ChronosDataset and save it
+        chronos_dataset = ChronosDataset(
+            datasets=train_datasets,
+            probabilities=probability,
+            tokenizer=chronos_config.create_tokenizer(),
+            context_length=context_length,
+            prediction_length=prediction_length,
+            min_past=min_past,
+            model_type=model_type,
+            imputation_method=LastValueImputation() if model_type == "causal" else None,
+            mode="training",
+        )
+        train_dataset = Dataset.from_list(list(chronos_dataset))
+        train_dataset.save_to_disk(dataset_path)
+
+    shuffled_train_dataset = train_dataset.shuffle(buffer_size=shuffle_buffer_length)
 
     # Define training args
     training_args = TTPOConfig(
