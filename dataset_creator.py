@@ -45,7 +45,10 @@ def create_dataset_with_forecaster(
         prediction_window = target[start_idx + context_length:start_idx + context_length + prediction_length]
         return context_window, prediction_window
 
-    datasets = []
+    pipeline = ChronosPipeline.from_pretrained(
+        "amazon/chronos-t5-small",
+        device_map="cpu",
+    )
     for entry in entries:
         context_window, prediction_window = sample_random_window(
             entry["target"], tokenizer.context_length, prediction_length
