@@ -49,7 +49,8 @@ def create_dataset_with_forecaster(
         "amazon/chronos-t5-small",
         device_map="cpu",
     )
-    for entry in entries:
+    datasets = []
+    
         context_window, prediction_window = sample_random_window(
             entry["target"], tokenizer.context_length, prediction_length
         )
