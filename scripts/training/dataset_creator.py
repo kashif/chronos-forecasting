@@ -1,5 +1,6 @@
 import ast
 import itertools
+import concurrent.futures
 from functools import partial
 from pathlib import Path
 from typing import List, Optional
@@ -41,7 +42,8 @@ def main(
     temperature: float = 1.0,
     top_k: int = 50,
     top_p: float = 1.0,
-):
+    num_workers: int = 4,
+): 
 
     chronos_config = ChronosConfig(
         tokenizer_class=tokenizer_class,
@@ -88,8 +90,9 @@ def main(
         mode="training",
     )
 
-    # create the dataset by iterating max_steps times
-    dataset = list(itertools.islice(chronos_dataset, max_steps))
+    # create the dataset by iterating max_steps times in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+        dataset = list(executor.map(lambda _: next(iter(chronos_dataset)), range(max_steps)))
 
     # create a HF dataset from the json
     json_dataset = Dataset.from_list(dataset)
