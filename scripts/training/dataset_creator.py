@@ -2,10 +2,10 @@ import ast
 import concurrent.futures
 from functools import partial
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import typer
-from chronos import ChronosConfig, MeanScaleUniformBins
+from chronos import ChronosConfig
 from datasets import Dataset
 from gluonts.dataset.common import FileDataset
 from gluonts.itertools import Filter
@@ -42,8 +42,7 @@ def main(
     top_k: int = 50,
     top_p: float = 1.0,
     num_workers: int = 4,
-): 
-
+):
     chronos_config = ChronosConfig(
         tokenizer_class=tokenizer_class,
         tokenizer_kwargs=ast.literal_eval(tokenizer_kwargs),
@@ -75,10 +74,12 @@ def main(
         for data_path, freq in zip(training_data_paths, frequencies)
     ]
 
-    probabilities = ast.literal_eval(probabilities) if probabilities is not None else None
+    probabilities = (
+        ast.literal_eval(probabilities) if probabilities is not None else None
+    )
     ttpo_dataset = TTPODataset(
         datasets=train_datasets,
-        probabilities=probabilities,    
+        probabilities=probabilities,
         tokenizer=chronos_config.create_tokenizer(),
         context_length=context_length,
         prediction_length=prediction_length,
@@ -91,7 +92,9 @@ def main(
 
     # create the dataset by iterating max_steps times in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-        dataset = list(executor.map(lambda _: next(iter(ttpo_dataset)), range(max_steps)))
+        dataset = list(
+            executor.map(lambda _: next(iter(ttpo_dataset)), range(max_steps))
+        )
 
     # create a HF dataset from the json
     hf_dataset = Dataset.from_list(dataset)

@@ -31,8 +31,8 @@ from transformers import (
 )
 import accelerate
 import gluonts
-from gluonts.dataset.common import FileDataset, ListDataset
-from datasets import load_dataset, Dataset, DatasetDict
+from gluonts.dataset.common import FileDataset
+from datasets import Dataset
 from gluonts.itertools import Cyclic, Map, Filter
 from gluonts.transform import (
     FilterTransformation,
@@ -501,10 +501,8 @@ class TTPODataset(IterableDataset, ShuffleMixin):
             chronos_forecast.mean(dim=1).squeeze().numpy(),
             seasonal_error,
         )
-        chronos_labels, chronos_labels_mask = (
-            self.tokenizer.label_input_transform(
-                chronos_forecast.mean(dim=1), scale
-            )
+        chronos_labels, chronos_labels_mask = self.tokenizer.label_input_transform(
+            chronos_forecast.mean(dim=1), scale
         )
         chronos_labels[chronos_labels_mask == 0] = -100
 
@@ -588,7 +586,7 @@ class TTPODataset(IterableDataset, ShuffleMixin):
 @use_yaml_config(param_name="config")
 def main(
     training_data_paths: Optional[str] = None,
-    frequencies: Optional[str] = None, 
+    frequencies: Optional[str] = None,
     probability: Optional[str] = None,
     context_length: int = 512,
     prediction_length: int = 64,
@@ -659,7 +657,6 @@ def main(
     output_dir = get_next_path("run", base_dir=output_dir, file_type="")
 
     log_on_main(f"Logging dir: {output_dir}", logger)
-    
 
     log_on_main("Initializing model", logger)
 
@@ -694,7 +691,7 @@ def main(
     model.config.chronos_config = chronos_config.__dict__
 
     # Load dataset from a saved file if available
-    
+
     if dataset_path and os.path.exists(dataset_path):
         # hf_dataset = load_dataset("json", data_files=dataset_path)
         # train_dataset = hf_dataset["train"]
@@ -710,7 +707,7 @@ def main(
             f"Mixing probabilities: {probability}",
             logger,
         )
-        
+
         training_data_paths = ast.literal_eval(training_data_paths)
         assert isinstance(training_data_paths, list)
 
@@ -723,7 +720,6 @@ def main(
             probability = [1.0 / len(training_data_paths)] * len(training_data_paths)
         assert isinstance(probability, list)
 
-
         train_datasets = [
             Filter(
                 partial(
@@ -735,7 +731,7 @@ def main(
             )
             for data_path, freq in zip(training_data_paths, frequencies)
         ]
-        
+
         # Create ChronosDataset and save it
         chronos_dataset = TTPODataset(
             datasets=train_datasets,
