@@ -1,5 +1,4 @@
 import ast
-import itertools
 import concurrent.futures
 from functools import partial
 from pathlib import Path
@@ -77,9 +76,9 @@ def main(
     ]
 
     probabilities = ast.literal_eval(probabilities) if probabilities is not None else None
-    chronos_dataset = TTPODataset(
+    ttpo_dataset = TTPODataset(
         datasets=train_datasets,
-        probabilities=probabilities,
+        probabilities=probabilities,    
         tokenizer=chronos_config.create_tokenizer(),
         context_length=context_length,
         prediction_length=prediction_length,
@@ -92,11 +91,11 @@ def main(
 
     # create the dataset by iterating max_steps times in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
-        dataset = list(executor.map(lambda _: next(iter(chronos_dataset)), range(max_steps)))
+        dataset = list(executor.map(lambda _: next(iter(ttpo_dataset)), range(max_steps)))
 
     # create a HF dataset from the json
-    json_dataset = Dataset.from_list(dataset)
-    dataset.save_to_disk("chronos_dataset")
+    hf_dataset = Dataset.from_list(dataset)
+    hf_dataset.save_to_disk("chronos_dataset")
 
 
 if __name__ == "__main__":

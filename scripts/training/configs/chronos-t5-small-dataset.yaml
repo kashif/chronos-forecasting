@@ -10,7 +10,7 @@ probabilities:
 context_length: 512
 prediction_length: 64
 min_past: 60
-max_steps: 200_000
+max_steps: 2000
 save_steps: 100_000
 logging_steps: 1
 per_device_train_batch_size: 32
@@ -19,7 +19,7 @@ optim: adamw_torch_fused
 num_samples: 20
 shuffle_buffer_length: 8
 gradient_accumulation_steps: 2
-model_id: google/t5-efficient-tiny
+model_id: amazon/chronos-t5-small
 model_type: seq2seq
 random_init: true
 tie_embeddings: true

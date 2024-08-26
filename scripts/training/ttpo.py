@@ -267,7 +267,7 @@ class ShuffleMixin:
         return PseudoShuffledIterableDataset(self, shuffle_buffer_length)
 
 
-class ChronosDataset(IterableDataset, ShuffleMixin):
+class TTPODataset(IterableDataset, ShuffleMixin):
     """
     Dataset wrapper, using a ``ChronosTokenizer`` to turn data from a time series
     into a HuggingFace-compatible set of ``input_ids``, ``attention_mask`` and
@@ -310,6 +310,7 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
         prediction_length: int = 64,
         drop_prob: float = 0.2,
         min_past: Optional[int] = None,
+        model_id: str = "amazon/chronos-t5-small",
         model_type: str = "seq2seq",
         imputation_method: Optional[MissingValueImputation] = None,
         mode: str = "training",
@@ -335,8 +336,8 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 
         # chorono static pipeline
         self.pipeline = ChronosPipeline.from_pretrained(
-            "amazon/chronos-t5-small",
-            device_map="cpu",  # use "cpu" for CPU inference and "mps" for Apple Silicon
+            model_id,
+            device_map="cuda",  # use "cpu" for CPU inference and "mps" for Apple Silicon
             # torch_dtype=torch.bfloat16,
         )
 
@@ -586,8 +587,8 @@ class ChronosDataset(IterableDataset, ShuffleMixin):
 @app.command()
 @use_yaml_config(param_name="config")
 def main(
-    training_data_paths: str,
-    frequency: str,
+    training_data_paths: Optional[str] = None,
+    frequencies: Optional[str] = None, 
     probability: Optional[str] = None,
     context_length: int = 512,
     prediction_length: int = 64,
@@ -625,6 +626,7 @@ def main(
     seed: Optional[int] = None,
     alpha: float = 0.1,
     beta: float = 0.1,
+    dataset_path: Optional[str] = "training/chronos_dataset",
 ):
     if tf32 and not (
         torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 8
@@ -647,17 +649,6 @@ def main(
 
     raw_training_config = deepcopy(locals())
     output_dir = Path(output_dir)
-    training_data_paths = ast.literal_eval(training_data_paths)
-    assert isinstance(training_data_paths, list)
-
-    frequency = ast.literal_eval(frequency)
-    assert isinstance(frequency, list)
-
-    if isinstance(probability, str):
-        probability = ast.literal_eval(probability)
-    elif probability is None:
-        probability = [1.0 / len(training_data_paths)] * len(training_data_paths)
-    assert isinstance(probability, list)
 
     if isinstance(tokenizer_kwargs, str):
         tokenizer_kwargs = ast.literal_eval(tokenizer_kwargs)
@@ -668,28 +659,7 @@ def main(
     output_dir = get_next_path("run", base_dir=output_dir, file_type="")
 
     log_on_main(f"Logging dir: {output_dir}", logger)
-    log_on_main(
-        f"Loading and filtering {len(training_data_paths)} datasets "
-        f"for training: {training_data_paths}",
-        logger,
-    )
-
-    log_on_main(
-        f"Mixing probabilities: {probability}",
-        logger,
-    )
-
-    train_datasets = [
-        Filter(
-            partial(
-                has_enough_observations,
-                min_length=min_past + prediction_length,
-                max_missing_prop=max_missing_prop,
-            ),
-            FileDataset(path=Path(data_path), freq=freq),
-        )
-        for data_path, freq in zip(training_data_paths, frequency)
-    ]
+    
 
     log_on_main("Initializing model", logger)
 
@@ -724,13 +694,50 @@ def main(
     model.config.chronos_config = chronos_config.__dict__
 
     # Load dataset from a saved file if available
-    dataset_path = "path/to/saved/dataset"
-    if os.path.exists(dataset_path):
-        hf_dataset = load_dataset("json", data_files=dataset_path)
-        train_dataset = hf_dataset["train"]
+    
+    if dataset_path and os.path.exists(dataset_path):
+        # hf_dataset = load_dataset("json", data_files=dataset_path)
+        # train_dataset = hf_dataset["train"]
+        train_dataset = Dataset.load_from_disk(dataset_path)
     else:
+        log_on_main(
+            f"Loading and filtering {len(training_data_paths)} datasets "
+            f"for training: {training_data_paths}",
+            logger,
+        )
+
+        log_on_main(
+            f"Mixing probabilities: {probability}",
+            logger,
+        )
+        
+        training_data_paths = ast.literal_eval(training_data_paths)
+        assert isinstance(training_data_paths, list)
+
+        frequencies = ast.literal_eval(frequencies)
+        assert isinstance(frequencies, list)
+
+        if isinstance(probability, str):
+            probability = ast.literal_eval(probability)
+        elif probability is None:
+            probability = [1.0 / len(training_data_paths)] * len(training_data_paths)
+        assert isinstance(probability, list)
+
+
+        train_datasets = [
+            Filter(
+                partial(
+                    has_enough_observations,
+                    min_length=min_past + prediction_length,
+                    max_missing_prop=max_missing_prop,
+                ),
+                FileDataset(path=Path(data_path), freq=freq),
+            )
+            for data_path, freq in zip(training_data_paths, frequencies)
+        ]
+        
         # Create ChronosDataset and save it
-        chronos_dataset = ChronosDataset(
+        chronos_dataset = TTPODataset(
             datasets=train_datasets,
             probabilities=probability,
             tokenizer=chronos_config.create_tokenizer(),
@@ -744,7 +751,7 @@ def main(
         train_dataset = Dataset.from_list(list(chronos_dataset))
         train_dataset.save_to_disk(dataset_path)
 
-    shuffled_train_dataset = train_dataset.shuffle(buffer_size=shuffle_buffer_length)
+    shuffled_train_dataset = train_dataset.shuffle()
 
     # Define training args
     training_args = TTPOConfig(
