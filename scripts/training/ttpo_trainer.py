@@ -23,20 +23,21 @@ class TTPOTrainer(Trainer):
         chosen_outputs = model(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            labels=inputs["chosen_labels"],
         )
         rejected_outputs = model(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            labels=inputs["rejected_labels"],
         )
 
-        chosen_logits = chosen_outputs.logits
+        # Shift logits and labels for chosen outputs
+        chosen_logits = chosen_outputs.logits[:, :-1, :].contiguous()
         chosen_log_probs = chosen_logits.log_softmax(-1)
 
-        rejected_logits = rejected_outputs.logits
+        # Shift logits and labels for rejected outputs
+        rejected_logits = rejected_outputs.logits[:, :-1, :].contiguous()
         rejected_log_probs = rejected_logits.log_softmax(-1)
 
+        # Calculate ratio using shifted log probabilities
         ratio = (chosen_log_probs - rejected_log_probs) * inputs[
             "abs_metric_diff"
         ].reshape(-1, 1, 1)

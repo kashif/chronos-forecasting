@@ -56,6 +56,10 @@ from ttpo_trainer import TTPOTrainer
 app = typer.Typer(pretty_exceptions_enable=False)
 
 
+os.environ["WANDB_PROJECT"] = "TTPO"
+os.environ["WANDB_LOG_MODEL"] = "checkpoint"
+
+
 def is_main_process() -> bool:
     """
     Check if we're on the main process.
