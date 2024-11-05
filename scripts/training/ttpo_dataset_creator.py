@@ -27,6 +27,7 @@ def main(
     prediction_length: int = 64,
     min_past: int = 64,
     max_steps: int = 200_000,
+    per_device_train_batch_size: int = 32,
     max_missing_prop: float = 0.9,
     tokenizer_class: str = "MeanScaleUniformBins",
     tokenizer_kwargs: str = "{'low_limit': -15.0, 'high_limit': 15.0}",
@@ -94,12 +95,14 @@ def main(
     # create the dataset by iterating max_steps times in parallel
     with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
         dataset = list(
-            executor.map(lambda _: next(iter(ttpo_dataset)), range(max_steps))
+            executor.map(
+                lambda _: next(iter(ttpo_dataset)), range(max_steps * per_device_train_batch_size)
+            )
         )
 
     # create a HF dataset from the json
     hf_dataset = Dataset.from_list(dataset)
-    hf_dataset.save_to_disk("chronos_dataset")
+    hf_dataset.save_to_disk(f"ttpo-{model_id}-dataset")
 
 
 if __name__ == "__main__":
