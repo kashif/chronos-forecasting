@@ -1,9 +1,9 @@
 training_data_paths:
-- "/home/kashif/.gluonts/datasets/electricity/train/data.json.gz"
-- "/home/kashif/.gluonts/datasets/traffic/train/data.json.gz"
-- "/home/kashif/.gluonts/datasets/australian_electricity_demand/train/data.json.gz"
-- "/home/kashif/.gluonts/datasets/car_parts_without_missing/train/data.json.gz"
-- "/home/kashif/.gluonts/datasets/london_smart_meters_without_missing/train/data.json.gz"
+- "~/.gluonts/datasets/electricity/train/data.json.gz"
+- "~/.gluonts/datasets/traffic/train/data.json.gz"
+- "~/.gluonts/datasets/australian_electricity_demand/train/data.json.gz"
+- "~/.gluonts/datasets/car_parts_without_missing/train/data.json.gz"
+- "~/.gluonts/datasets/london_smart_meters_without_missing/train/data.json.gz"
 frequencies:
 - "1H"
 - "H"
